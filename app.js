@@ -42,7 +42,7 @@ function addLegend() {
     box-shadow: 0 0 3px rgba(0,0,0,0.3);
   `;
 	legend.innerHTML = `
-    <strong>Heatmap Legend</strong><br>
+    <strong>Fatalities</strong><br>
     <div style="display: flex; align-items: center;">
       <div style="width: 20px; height: 20px; background: rgba(33,102,172,1);"></div>
       <span style="margin-left: 5px;">Low</span>
