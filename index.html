@@ -7,168 +7,137 @@
 		<!-- Mapbox GL CSS -->
 		<link href="https://api.mapbox.com/mapbox-gl-js/v2.13.0/mapbox-gl.css" rel="stylesheet" />
 		<link rel="stylesheet" href="styles.css" />
-		<style>
-			/* Basic styles for layout */
-			body {
-				margin: 0;
-				font-family: sans-serif;
-			}
-			.container {
-				padding: 20px;
-			}
-			#map {
-				height: 600px;
-				width: 100%;
-				margin-top: 20px;
-			}
-			#loading-message {
-				display: none;
-			}
-			#filter-controls {
-				margin-bottom: 10px;
-			}
-			/* Style for the time slider and its container */
-			#time-slider-container {
-				margin-top: 10px;
-			}
-			#time-slider {
-				width: 100%;
-			}
-			#time-value {
-				font-weight: bold;
-				margin-left: 5px;
-			}
-			/* Style for layer mode selector */
-			#layer-mode-container {
-				margin-top: 10px;
-			}
-		</style>
 	</head>
 	<body>
 		<div class="container">
-			<h1>Crash Data Heatmap</h1>
-			<p>Visualizing crash data using the NHTSA CrashAPI.</p>
-
-			<div id="filter-controls">
-				<label for="select-state">Select State:</label>
-				<!-- Single-select for states; FARS doesn't support multi -->
-				<select id="select-state">
-					<option value="1">Alabama</option>
-					<option value="2">Alaska</option>
-					<option value="4">Arizona</option>
-					<option value="5">Arkansas</option>
-					<option value="6">California</option>
-					<option value="8">Colorado</option>
-					<option value="9">Connecticut</option>
-					<option value="10">Delaware</option>
-					<option value="11">District of Columbia</option>
-					<option value="12">Florida</option>
-					<option value="13">Georgia</option>
-					<option value="15">Hawaii</option>
-					<option value="16">Idaho</option>
-					<option value="17">Illinois</option>
-					<option value="18">Indiana</option>
-					<option value="19">Iowa</option>
-					<option value="20">Kansas</option>
-					<option value="21">Kentucky</option>
-					<option value="22">Louisiana</option>
-					<option value="23">Maine</option>
-					<option value="24">Maryland</option>
-					<option value="25">Massachusetts</option>
-					<option value="26">Michigan</option>
-					<option value="27">Minnesota</option>
-					<option value="28">Mississippi</option>
-					<option value="29">Missouri</option>
-					<option value="30">Montana</option>
-					<option value="31">Nebraska</option>
-					<option value="32">Nevada</option>
-					<option value="33">New Hampshire</option>
-					<option value="34">New Jersey</option>
-					<option value="35">New Mexico</option>
-					<option value="36">New York</option>
-					<option value="37">North Carolina</option>
-					<option value="38">North Dakota</option>
-					<option value="39">Ohio</option>
-					<option value="40">Oklahoma</option>
-					<option value="41">Oregon</option>
-					<option value="42">Pennsylvania</option>
-					<option value="43">Puerto Rico</option>
-					<option value="44">Rhode Island</option>
-					<option value="45">South Carolina</option>
-					<option value="46">South Dakota</option>
-					<option value="47">Tennessee</option>
-					<option value="48">Texas</option>
-					<option value="49">Utah</option>
-					<option value="50">Vermont</option>
-					<option value="51">Virginia</option>
-					<option value="52">Virgin Islands</option>
-					<option value="53">Washington</option>
-					<option value="54">West Virginia</option>
-					<option value="55">Wisconsin</option>
-					<option value="56">Wyoming</option>
-				</select>
-
-				<label for="select-start-year">Start Year:</label>
-				<select id="select-start-year">
-					<option value="">Select Start Year</option>
-					<option value="2010">2010</option>
-					<option value="2011">2011</option>
-					<option value="2012">2012</option>
-					<option value="2013">2013</option>
-					<option value="2014">2014</option>
-					<option value="2015">2015</option>
-					<option value="2016">2016</option>
-					<option value="2017">2017</option>
-					<option value="2018">2018</option>
-					<option value="2019">2019</option>
-					<option value="2020">2020</option>
-				</select>
-
-				<label for="select-end-year">End Year:</label>
-				<select id="select-end-year">
-					<option value="">Select End Year</option>
-					<option value="2010">2010</option>
-					<option value="2011">2011</option>
-					<option value="2012">2012</option>
-					<option value="2013">2013</option>
-					<option value="2014">2014</option>
-					<option value="2015">2015</option>
-					<option value="2016">2016</option>
-					<option value="2017">2017</option>
-					<option value="2018">2018</option>
-					<option value="2019">2019</option>
-					<option value="2020">2020</option>
-				</select>
-
-				<button id="fetch-data">Generate</button>
-
-				<!-- Checkbox to enable/disable time filtering -->
-				<div id="time-filter-controls">
-					<label>
-						<input id="filter-time-checkbox" type="checkbox" />
-						Filter by Time-of-Day
-					</label>
-				</div>
-
-				<!-- Time-of-day slider -->
-				<div id="time-slider-container">
-					<label for="time-slider">Time of Day (Hour):</label>
-					<input id="time-slider" type="range" min="0" max="23" value="0" />
-					<span id="time-value">0</span>
-				</div>
-
-				<!-- Display mode selector -->
-				<div id="layer-mode-container">
-					<label for="layer-mode">Display Mode:</label>
-					<select id="layer-mode" defaultValue="heatmap">
-						<option value="markers">Markers</option>
-						<option value="heatmap">Heatmap</option>
+			<!-- Sidebar for filters -->
+			<aside id="sidebar">
+				<h1>Crash Data Heatmap</h1>
+				<p>Visualizing crash data using the NHTSA CrashAPI.</p>
+				<div id="filter-controls">
+					<label for="select-state">Select State:</label>
+					<!-- Single-select for states; FARS doesn't support multi -->
+					<select id="select-state">
+						<option value="1">Alabama</option>
+						<option value="2">Alaska</option>
+						<option value="4">Arizona</option>
+						<option value="5">Arkansas</option>
+						<option value="6">California</option>
+						<option value="8">Colorado</option>
+						<option value="9">Connecticut</option>
+						<option value="10">Delaware</option>
+						<option value="11">District of Columbia</option>
+						<option value="12">Florida</option>
+						<option value="13">Georgia</option>
+						<option value="15">Hawaii</option>
+						<option value="16">Idaho</option>
+						<option value="17">Illinois</option>
+						<option value="18">Indiana</option>
+						<option value="19">Iowa</option>
+						<option value="20">Kansas</option>
+						<option value="21">Kentucky</option>
+						<option value="22">Louisiana</option>
+						<option value="23">Maine</option>
+						<option value="24">Maryland</option>
+						<option value="25">Massachusetts</option>
+						<option value="26">Michigan</option>
+						<option value="27">Minnesota</option>
+						<option value="28">Mississippi</option>
+						<option value="29">Missouri</option>
+						<option value="30">Montana</option>
+						<option value="31">Nebraska</option>
+						<option value="32">Nevada</option>
+						<option value="33">New Hampshire</option>
+						<option value="34">New Jersey</option>
+						<option value="35">New Mexico</option>
+						<option value="36">New York</option>
+						<option value="37">North Carolina</option>
+						<option value="38">North Dakota</option>
+						<option value="39">Ohio</option>
+						<option value="40">Oklahoma</option>
+						<option value="41">Oregon</option>
+						<option value="42">Pennsylvania</option>
+						<option value="43">Puerto Rico</option>
+						<option value="44">Rhode Island</option>
+						<option value="45">South Carolina</option>
+						<option value="46">South Dakota</option>
+						<option value="47">Tennessee</option>
+						<option value="48">Texas</option>
+						<option value="49">Utah</option>
+						<option value="50">Vermont</option>
+						<option value="51">Virginia</option>
+						<option value="52">Virgin Islands</option>
+						<option value="53">Washington</option>
+						<option value="54">West Virginia</option>
+						<option value="55">Wisconsin</option>
+						<option value="56">Wyoming</option>
 					</select>
-				</div>
-			</div>
 
-			<div id="map"></div>
-			<p id="loading-message">Loading data...</p>
+					<label for="select-start-year">Start Year:</label>
+					<select id="select-start-year">
+						<option value="">Select Start Year</option>
+						<option value="2010">2010</option>
+						<option value="2011">2011</option>
+						<option value="2012">2012</option>
+						<option value="2013">2013</option>
+						<option value="2014">2014</option>
+						<option value="2015">2015</option>
+						<option value="2016">2016</option>
+						<option value="2017">2017</option>
+						<option value="2018">2018</option>
+						<option value="2019">2019</option>
+						<option value="2020">2020</option>
+					</select>
+
+					<label for="select-end-year">End Year:</label>
+					<select id="select-end-year">
+						<option value="">Select End Year</option>
+						<option value="2010">2010</option>
+						<option value="2011">2011</option>
+						<option value="2012">2012</option>
+						<option value="2013">2013</option>
+						<option value="2014">2014</option>
+						<option value="2015">2015</option>
+						<option value="2016">2016</option>
+						<option value="2017">2017</option>
+						<option value="2018">2018</option>
+						<option value="2019">2019</option>
+						<option value="2020">2020</option>
+					</select>
+
+					<button id="fetch-data">Generate</button>
+
+					<!-- Checkbox to enable/disable time filtering -->
+					<div id="time-filter-controls">
+						<label>
+							<input id="filter-time-checkbox" type="checkbox" />
+							Filter by Time-of-Day
+						</label>
+					</div>
+
+					<!-- Time-of-day slider -->
+					<div id="time-slider-container">
+						<label for="time-slider">Time of Day (Hour):</label>
+						<input id="time-slider" type="range" min="0" max="23" value="0" />
+						<span id="time-value">0</span>
+					</div>
+
+					<!-- Display mode selector -->
+					<div id="layer-mode-container">
+						<label for="layer-mode">Display Mode:</label>
+						<select id="layer-mode">
+							<option value="heatmap" selected>Heatmap</option>
+							<option value="markers">Markers</option>
+						</select>
+					</div>
+				</div>
+			</aside>
+
+			<!-- Main map container -->
+			<main id="map-container">
+				<div id="map"></div>
+				<p id="loading-message">Loading data...</p>
+			</main>
 		</div>
 
 		<!-- Mapbox GL JS -->
