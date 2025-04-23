@@ -82,18 +82,22 @@ document.getElementById("filter-time-checkbox").addEventListener("change", (e) =
 	} else {
 		slider.disabled = true;
 		timeValueSpan.textContent = "All";
-		// When disabled, reset to show all features.
+		// When disabled, reset to show all features on both sources.
+		const resetGeojson = {
+			type: "FeatureCollection",
+			features: allFeatures,
+		};
 		if (map.getSource("crash-data-heatmap")) {
-			const allGeojson = {
-				type: "FeatureCollection",
-				features: allFeatures,
-			};
-			map.getSource("crash-data-heatmap").setData(allGeojson);
+			map.getSource("crash-data-heatmap").setData(resetGeojson);
+		}
+		if (map.getSource("crash-data-markers")) {
+			map.getSource("crash-data-markers").setData(resetGeojson);
 		}
 	}
 });
 
 // Listen for changes on the time slider to filter data.
+// Now updates both sources.
 document.getElementById("time-slider").addEventListener("input", (e) => {
 	const selectedHour = Number(e.target.value);
 	document.getElementById("time-value").textContent = selectedHour;
@@ -103,6 +107,9 @@ document.getElementById("time-slider").addEventListener("input", (e) => {
 	if (map.getSource("crash-data-heatmap")) {
 		map.getSource("crash-data-heatmap").setData(filteredGeojson);
 	}
+	if (map.getSource("crash-data-markers")) {
+		map.getSource("crash-data-markers").setData(filteredGeojson);
+	}
 });
 
 // Listen for changes on the layer mode selector.
@@ -110,18 +117,127 @@ document.getElementById("layer-mode").addEventListener("change", (e) => {
 	const mode = e.target.value;
 	console.log("Layer mode:", mode);
 	if (mode === "heatmap") {
-		// Show heatmap layer, hide marker+cluster layer.
+		// Show heatmap only.
 		map.setLayoutProperty("crash-heat", "visibility", "visible");
 		map.setLayoutProperty("clusters", "visibility", "none");
 		map.setLayoutProperty("cluster-count", "visibility", "none");
 		map.setLayoutProperty("unclustered-point", "visibility", "none");
 	} else if (mode === "markers") {
-		// Hide heatmap layer, show marker+cluster layer.
+		// Show markers only.
 		map.setLayoutProperty("crash-heat", "visibility", "none");
 		map.setLayoutProperty("clusters", "visibility", "visible");
 		map.setLayoutProperty("cluster-count", "visibility", "visible");
 		map.setLayoutProperty("unclustered-point", "visibility", "visible");
+	} else if (mode === "combined") {
+		// Show both layers.
+		map.setLayoutProperty("crash-heat", "visibility", "visible");
+		map.setLayoutProperty("clusters", "visibility", "visible");
+		map.setLayoutProperty("cluster-count", "visibility", "visible");
+		map.setLayoutProperty("unclustered-point", "visibility", "visible");
 	}
+});
+
+// --- Enhanced Cluster Hover Interactivity ---
+// Create a reusable popup for cluster hover.
+let clusterPopup = new mapboxgl.Popup({
+	closeButton: false,
+	closeOnClick: false,
+});
+
+// When hovering over clusters, show a popup with aggregated info.
+map.on("mouseenter", "clusters", (e) => {
+	map.getCanvas().style.cursor = "pointer";
+	const features = map.queryRenderedFeatures(e.point, { layers: ["clusters"] });
+	if (!features.length) return;
+	const cluster = features[0];
+	const clusterId = cluster.properties.cluster_id;
+	// Use getClusterLeaves to fetch underlying features (up to 100000).
+	map.getSource("crash-data-markers").getClusterLeaves(clusterId, 100000, 0, (err, leaves) => {
+		if (err) {
+			console.error("Error getting cluster leaves:", err);
+			return;
+		}
+		// Compute aggregated values.
+		const accidentCount = leaves.length;
+		const totalFatalities = leaves.reduce((sum, leaf) => sum + leaf.properties.fatalities, 0);
+		// For drunk driving: count an accident as 1 if drunk > 0, else 0.
+		const drunkCount = leaves.reduce((sum, leaf) => sum + (leaf.properties.drunk > 0 ? 1 : 0), 0);
+		const drunkPercentage = accidentCount ? Math.round((drunkCount / accidentCount) * 100) : 0;
+
+		// Compute the most common weather condition.
+		const weatherFreq = {};
+		leaves.forEach((leaf) => {
+			const w = leaf.properties.weather;
+			if (w) {
+				if (weatherFreq[w]) {
+					weatherFreq[w] += 1;
+				} else {
+					weatherFreq[w] = 1;
+				}
+			}
+		});
+		const mostCommonWeather = Object.keys(weatherFreq).reduce(
+			(a, b) => (weatherFreq[a] >= weatherFreq[b] ? a : b),
+			"Unknown"
+		);
+
+		// Compute most common city, county, and state.
+		const computeMode = (arr) => {
+			const freq = {};
+			arr.forEach((item) => {
+				if (item && item !== "Not Applicable") {
+					if (freq[item]) {
+						freq[item] += 1;
+					} else {
+						freq[item] = 1;
+					}
+				}
+			});
+			const mode = Object.keys(freq).reduce((a, b) => (freq[a] >= freq[b] ? a : b), "");
+			return mode || "Not Applicable";
+		};
+
+		const mostCommonCity = computeMode(leaves.map((leaf) => leaf.properties.city));
+		const mostCommonCounty = computeMode(leaves.map((leaf) => leaf.properties.county));
+		const mostCommonState = computeMode(leaves.map((leaf) => leaf.properties.state));
+
+		// Format location info: only include fields that are not "Not Applicable".
+		const locs = [];
+		if (mostCommonCounty !== "Not Applicable") locs.push(mostCommonCounty);
+		if (mostCommonState !== "Not Applicable") locs.push(mostCommonState);
+		const locationText = locs.length ? locs.join(", ") : "Unknown";
+
+		// Create the popup content.
+		const popupContent = `
+		<div style="
+			font-family: 'Roboto', sans-serif;
+			font-size: 13px;
+			line-height: 1.3;
+			background: #2a2a2a;
+			color: #ecf0f1;
+			padding: 8px;
+			border-radius: 8px;
+		  ">
+		  <strong style="color:#1abc9c;">${accidentCount} Accidents</strong><br>
+		  <span>Total Fatalities: ${totalFatalities}</span><br>
+		  <span>Percentage of Accidents involving Drunk Driving: ${drunkPercentage}%</span><br>
+		  <span>Most Common Weather Condition: ${mostCommonWeather}</span><br>
+		  <span>Most Common County: ${mostCommonCounty}</span>
+		  <span>Most Common State: ${mostCommonState}<span>
+		</div>`;
+
+		clusterPopup.setLngLat(cluster.geometry.coordinates).setHTML(popupContent).addTo(map);
+	});
+});
+
+map.on("mouseleave", "clusters", () => {
+	map.getCanvas().style.cursor = "";
+	clusterPopup.remove();
+});
+
+// remove popup info on zoom so new resized cluster's info is shown
+map.on("zoom", () => {
+	clusterPopup.remove();
 });
 
 // Fetch data and create both sources.
@@ -133,6 +249,7 @@ document.getElementById("fetch-data").addEventListener("click", async () => {
 	const stateSelect = document.getElementById("select-state").value;
 	const startYear = document.getElementById("select-start-year").value;
 	const endYear = document.getElementById("select-end-year").value;
+	const datasetSelect = document.getElementById("dataset-selector").value;
 
 	// Build the API URL.
 	let apiUrl =
@@ -145,8 +262,12 @@ document.getElementById("fetch-data").addEventListener("click", async () => {
 	}
 	if (stateSelect) {
 		apiUrl += `&State=${stateSelect}`;
+	} else {
+		apiUrl += `&State=`;
 	}
 	apiUrl += "&format=json";
+	apiUrl = apiUrl.replace("dataset=Accident", `dataset=${datasetSelect}`);
+
 	console.log("Requesting:", apiUrl);
 	try {
 		const response = await fetch(apiUrl);
@@ -170,6 +291,11 @@ document.getElementById("fetch-data").addEventListener("click", async () => {
 				properties: {
 					fatalities: record.FATALS ? Number(record.FATALS) : 1,
 					originalHour: record.HOUR ? Number(record.HOUR) : -1,
+					city: record.CITYNAME || "Not Applicable",
+					county: record.COUNTYNAME || "Not Applicable",
+					state: record.STATENAME || "Not Applicable",
+					drunk: record.DRUNK_DR ? Number(record.DRUNK_DR) : 0,
+					weather: record.WEATHER1NAME || "Unknown",
 				},
 				geometry: {
 					type: "Point",
@@ -235,6 +361,10 @@ document.getElementById("fetch-data").addEventListener("click", async () => {
 				cluster: true,
 				clusterMaxZoom: 14,
 				clusterRadius: 50,
+				clusterProperties: {
+					// sum of fatalities across current cluster of features
+					totalFatalities: ["+", ["get", "fatalities"]],
+				},
 			});
 
 			map.addLayer({
@@ -284,6 +414,25 @@ document.getElementById("fetch-data").addEventListener("click", async () => {
 					"circle-stroke-color": "#fff",
 				},
 			});
+		}
+
+		// after fetching --> check layer visibility matches current mode.
+		const currentMode = document.getElementById("layer-mode").value;
+		if (currentMode === "heatmap") {
+			map.setLayoutProperty("crash-heat", "visibility", "visible");
+			map.setLayoutProperty("clusters", "visibility", "none");
+			map.setLayoutProperty("cluster-count", "visibility", "none");
+			map.setLayoutProperty("unclustered-point", "visibility", "none");
+		} else if (currentMode === "markers") {
+			map.setLayoutProperty("crash-heat", "visibility", "none");
+			map.setLayoutProperty("clusters", "visibility", "visible");
+			map.setLayoutProperty("cluster-count", "visibility", "visible");
+			map.setLayoutProperty("unclustered-point", "visibility", "visible");
+		} else if (currentMode === "combined") {
+			map.setLayoutProperty("crash-heat", "visibility", "visible");
+			map.setLayoutProperty("clusters", "visibility", "visible");
+			map.setLayoutProperty("cluster-count", "visibility", "visible");
+			map.setLayoutProperty("unclustered-point", "visibility", "visible");
 		}
 
 		// adjust the map view to fit the data bounds.
