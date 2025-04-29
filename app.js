@@ -540,15 +540,15 @@ async function handleDrugsData(records) {
 					["get", "percentPositive"],
 					0,
 					"rgba(217,240,203,0)",
-					0.2,
+					20,
 					"rgb(199,233,192)",
-					0.4,
+					40,
 					"rgb(161,217,155)",
-					0.6,
+					60,
 					"rgb(116,196,118)",
-					0.8,
+					80,
 					"rgb(65,171,93)",
-					1.0,
+					100,
 					"rgb(0,109,44)",
 				],
 				"fill-opacity": 0.8,
@@ -580,8 +580,8 @@ async function handleDrugsData(records) {
             box-shadow: 0 2px 6px rgba(0,0,0,0.5);
 		  ">
 			<strong style="color:#1abc9c;">${p.name}</strong><br>
-			<span>Total Tests: ${p.totalTests}</span><br>
-			<span>% Positive (%): ${p.percentPositive}</span>
+			<span>Total Drug Tests: ${p.totalTests}</span><br>
+			<span>Positive (%): ${p.percentPositive}</span>
 		  </div>`;
 			popup.setLngLat(e.lngLat).setHTML(html).addTo(map);
 		});
