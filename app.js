@@ -22,7 +22,11 @@ const layerModeContainer = document.getElementById("layer-mode-container");
 
 datasetSelector.addEventListener("change", (e) => {
 	const ds = e.target.value;
+	const stateSel = document.getElementById("select-state");
+	const yearNote = document.getElementById("year-note");
 	if (ds === "Drugs") {
+		stateSel.disabled = true;
+		yearNote.style.display = "block";
 		timeControls.style.display = "none";
 		sliderContainer.style.display = "none";
 		layerModeContainer.style.display = "none";
@@ -30,6 +34,8 @@ datasetSelector.addEventListener("change", (e) => {
 			if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
 		});
 	} else {
+		stateSel.disabled = false;
+		yearNote.style.display = "none";
 		timeControls.style.display = "flex";
 		sliderContainer.style.display = "flex";
 		layerModeContainer.style.display = "flex";
@@ -103,9 +109,31 @@ function updateLegendForAccident() {
 function updateLegendForDrugs() {
 	const legend = document.getElementById("legend");
 	legend.innerHTML = `
-	  <strong>Positive Drug Tests (%)</strong><br>
-	  <div style="display:flex;align-items:center;"><div style="width:20px;height:20px;background:#f1eef6"></div><span style="margin-left:5px">0%</span></div>
-	  <div style="display:flex;align-items:center;"><div style="width:20px;height:20px;background:#dd1c77"></div><span style="margin-left:5px">100%</span></div>
+	<strong style="color:#1abc9c;">Positive Drug Tests (%)</strong><br>
+    <div style="display:flex;align-items:center;">
+      <div style="width:20px;height:20px;background:rgba(217,240,203,0);"></div>
+      <span style="margin-left:5px">Low</span>
+    </div>
+    <div style="display:flex;align-items:center;">
+      <div style="width:20px;height:20px;background:rgb(199,233,192);"></div>
+      <span style="margin-left:5px">&nbsp;</span>
+    </div>
+	<div style="display: flex; align-items: center;">
+      <div style="width: 20px; height: 20px; background: rgb(161,217,155);"></div>
+      <span style="margin-left: 5px;">Medium</span>
+    </div>
+    <div style="display: flex; align-items: center;">
+      <div style="width: 20px; height: 20px; background: rgb(116,196,118);"></div>
+      <span style="margin-left: 5px;">&nbsp;</span>
+    </div>
+    <div style="display: flex; align-items: center;">
+      <div style="width: 20px; height: 20px; background: rgb(65,171,93);"></div>
+      <span style="margin-left: 5px;">High</span>
+    </div>
+    <div style="display: flex; align-items: center;">
+      <div style="width: 20px; height: 20px; background: rgb(0,109,44);"></div>
+      <span style="margin-left: 5px;">Very High</span>
+    </div>
 	`;
 }
 
@@ -511,13 +539,17 @@ async function handleDrugsData(records) {
 					["linear"],
 					["get", "percentPositive"],
 					0,
-					"#f1eef6",
-					20,
-					"#c994c7",
-					40,
-					"#dd1c77",
-					60,
-					"#980043",
+					"rgba(217,240,203,0)",
+					0.2,
+					"rgb(199,233,192)",
+					0.4,
+					"rgb(161,217,155)",
+					0.6,
+					"rgb(116,196,118)",
+					0.8,
+					"rgb(65,171,93)",
+					1.0,
+					"rgb(0,109,44)",
 				],
 				"fill-opacity": 0.8,
 			},
