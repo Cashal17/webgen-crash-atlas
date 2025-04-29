@@ -15,6 +15,13 @@
 				<h1>Crash Data Heatmap</h1>
 				<p>Visualizing crash data using the NHTSA CrashAPI.</p>
 				<div id="filter-controls">
+					<!-- Dataset Selector -->
+					<label for="dataset-selector">Dataset:</label>
+					<select id="dataset-selector">
+						<option value="Accident" selected>ACCIDENT (Fatalities)</option>
+						<option value="Drugs">DRUGS</option>
+					</select>
+
 					<label for="select-state">Select State:</label>
 					<!-- Single-select for states; FARS doesn't support multi -->
 					<select id="select-state">
@@ -104,13 +111,6 @@
 						<option value="2018">2018</option>
 						<option value="2019">2019</option>
 						<option value="2020">2020</option>
-					</select>
-
-					<!-- Dataset Selector -->
-					<label for="dataset-selector">Dataset:</label>
-					<select id="dataset-selector">
-						<option value="Accident" selected>ACCIDENT (Fatalities)</option>
-						<option value="Drugs">DRUGS</option>
 					</select>
 
 					<button id="fetch-data">Generate</button>

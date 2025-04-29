@@ -10,7 +10,55 @@ const map = new mapboxgl.Map({
 });
 
 let allFeatures = [];
+let stateGeoJSON = null;
+const statesGeojsonUrl = "https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json";
 
+// UI Elements
+const datasetSelector = document.getElementById("dataset-selector");
+const timeControls = document.getElementById("time-filter-controls");
+const sliderContainer = document.getElementById("time-slider-container");
+const layerModeContainer = document.getElementById("layer-mode-container");
+
+datasetSelector.addEventListener("change", () => {
+	const ds = datasetSelector.value;
+	if (ds === "Accident") {
+		timeControls.style.display = "flex";
+		sliderContainer.style.display = "flex";
+		layerModeContainer.style.display = "flex";
+		[("drug-choropleth", "drug-borders")].forEach((id) => {
+			if (map.getLayer(id)) {
+				map.setLayoutProperty(id, "visibility", "none");
+			}
+		});
+		if (map.getLayer("crash-heat")) {
+			map.setLayoutProperty("crash-heat", "visibility", "visible");
+		}
+		if (map.getLayer("clusters")) {
+			map.setLayoutProperty("clusters", "visibility", "visible");
+		}
+		if (map.getLayer("cluster-count")) {
+			map.setLayoutProperty("cluster-count", "visibility", "visible");
+		}
+		if (map.getLayer("unclustered-point")) {
+			map.setLayoutProperty("unclustered-point", "visibility", "visible");
+		}
+	} else if (ds === "Drugs") {
+		timeControls.style.display = "none";
+		sliderContainer.style.display = "none";
+		layerModeContainer.style.display = "none";
+		[("crash-heat", "clusters", "cluster-count", "unclustered-point")].forEach((id) => {
+			if (map.getLayer(id)) {
+				map.setLayoutProperty(id, "visibility", "none");
+			}
+		});
+		if (map.getLayer("drug-choropleth")) {
+			map.setLayoutProperty("drug-choropleth", "visibility", "visible");
+		}
+		if (map.getLayer("drug-borders")) {
+			map.setLayoutProperty("drug-borders", "visibility", "visible");
+		}
+	}
+});
 /**
  * Filters features based on the selected hour.
  * Returns a GeoJSON feature collection.
@@ -26,7 +74,8 @@ function filterFeaturesByTime(selectedHour) {
 	};
 }
 
-// Add a legend for the heatmap color ramp.
+typeLegend = document.createElement("div");
+// Add a legend.
 function addLegend() {
 	const legend = document.createElement("div");
 	legend.id = "legend";
@@ -41,6 +90,11 @@ function addLegend() {
     color: #333;
     box-shadow: 0 0 3px rgba(0,0,0,0.3);
   `;
+	map.getContainer().appendChild(legend);
+}
+map.on("load", addLegend);
+
+function updateLegendForAccident() {
 	legend.innerHTML = `
     <strong>Fatalities</strong><br>
     <div style="display: flex; align-items: center;">
@@ -68,9 +122,21 @@ function addLegend() {
       <span style="margin-left: 5px;">Very High</span>
     </div>
   `;
-	map.getContainer().appendChild(legend);
 }
-map.on("load", addLegend);
+
+function updateLegendForDrugs() {
+	legend.innerHTML = `
+    <strong>Positive Drug Tests (%)</strong><br>
+    <div style="display: flex; align-items: center;">
+      <div style="width: 20px; height: 20px; background: rgba(33,102,172,1);"></div>
+      <span style="margin-left: 5px;">0%</span>
+    </div>
+    <div style="display: flex; align-items: center;">
+      <div style="width: 20px; height: 20px; background: rgb(178,24,43);"></div>
+      <span style="margin-left: 5px;">100%</span>
+    </div>
+  `;
+}
 
 // Listen for changes on the time filter checkbox to enable/disable the slider.
 document.getElementById("filter-time-checkbox").addEventListener("change", (e) => {
@@ -240,7 +306,7 @@ map.on("zoom", () => {
 	clusterPopup.remove();
 });
 
-// Fetch data and create both sources.
+// Fetch data.
 document.getElementById("fetch-data").addEventListener("click", async () => {
 	const loadingMessage = document.getElementById("loading-message");
 	loadingMessage.style.display = "block";
@@ -249,11 +315,10 @@ document.getElementById("fetch-data").addEventListener("click", async () => {
 	const stateSelect = document.getElementById("select-state").value;
 	const startYear = document.getElementById("select-start-year").value;
 	const endYear = document.getElementById("select-end-year").value;
-	const datasetSelect = document.getElementById("dataset-selector").value;
+	const datasetSelect = datasetSelector.value;
 
 	// Build the API URL.
-	let apiUrl =
-		"https://cors-anywhere.herokuapp.com/https://crashviewer.nhtsa.dot.gov/CrashAPI/FARSData/GetFARSData?dataset=Accident";
+	let apiUrl = `https://cors-anywhere.herokuapp.com/https://crashviewer.nhtsa.dot.gov/CrashAPI/FARSData/GetFARSData?dataset=${datasetSelect}`;
 	if (startYear) {
 		apiUrl += `&FromYear=${startYear}`;
 	}
@@ -266,9 +331,8 @@ document.getElementById("fetch-data").addEventListener("click", async () => {
 		apiUrl += `&State=`;
 	}
 	apiUrl += "&format=json";
-	apiUrl = apiUrl.replace("dataset=Accident", `dataset=${datasetSelect}`);
-
 	console.log("Requesting:", apiUrl);
+
 	try {
 		const response = await fetch(apiUrl);
 		if (!response.ok) {
@@ -277,166 +341,45 @@ document.getElementById("fetch-data").addEventListener("click", async () => {
 		const resObj = await response.json();
 		const data = resObj.Results[0];
 		console.log("Fetched data:", data);
-		// Convert fetched data to GeoJSON.
-		const features = data
-			.filter((record) => {
-				const lat = parseFloat(record.LATITUDE);
-				const lng = parseFloat(record.LONGITUD);
-				if (isNaN(lat) || isNaN(lng)) return false;
-				if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
-				return true;
-			})
-			.map((record) => ({
-				type: "Feature",
-				properties: {
-					fatalities: record.FATALS ? Number(record.FATALS) : 1,
-					originalHour: record.HOUR ? Number(record.HOUR) : -1,
-					city: record.CITYNAME || "Not Applicable",
-					county: record.COUNTYNAME || "Not Applicable",
-					state: record.STATENAME || "Not Applicable",
-					drunk: record.DRUNK_DR ? Number(record.DRUNK_DR) : 0,
-					weather: record.WEATHER1NAME || "Unknown",
-				},
-				geometry: {
-					type: "Point",
-					coordinates: [parseFloat(record.LONGITUD), parseFloat(record.LATITUDE)],
-				},
-			}));
-
-		const geojsonData = {
-			type: "FeatureCollection",
-			features,
-		};
-		console.log("Generated GeoJSON:", geojsonData);
-
-		allFeatures = features;
-
-		// the heatmap source .
-		if (map.getSource("crash-data-heatmap")) {
-			map.getSource("crash-data-heatmap").setData(geojsonData);
-		} else {
-			map.addSource("crash-data-heatmap", {
-				type: "geojson",
-				data: geojsonData,
-				cluster: false,
-			});
-			map.addLayer({
-				id: "crash-heat",
-				type: "heatmap",
-				source: "crash-data-heatmap",
-				maxzoom: 9,
-				paint: {
-					"heatmap-weight": ["interpolate", ["linear"], ["get", "fatalities"], 0, 0, 5, 1],
-					"heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1, 9, 3],
-					"heatmap-color": [
-						"interpolate",
-						["linear"],
-						["heatmap-density"],
-						0,
-						"rgba(33,102,172,0)",
-						0.2,
-						"rgb(103,169,207)",
-						0.4,
-						"rgb(209,229,240)",
-						0.6,
-						"rgb(253,219,199)",
-						0.8,
-						"rgb(239,138,98)",
-						1,
-						"rgb(178,24,43)",
-					],
-					"heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 2, 9, 20],
-					"heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 1, 9, 0],
-				},
-			});
-		}
-
-		// the markers+clusters source.
-		if (map.getSource("crash-data-markers")) {
-			map.getSource("crash-data-markers").setData(geojsonData);
-		} else {
-			map.addSource("crash-data-markers", {
-				type: "geojson",
-				data: geojsonData,
-				cluster: true,
-				clusterMaxZoom: 14,
-				clusterRadius: 50,
-				clusterProperties: {
-					// sum of fatalities across current cluster of features
-					totalFatalities: ["+", ["get", "fatalities"]],
-				},
-			});
-
-			map.addLayer({
-				id: "clusters",
-				type: "circle",
-				source: "crash-data-markers",
-				filter: ["has", "point_count"],
-				paint: {
-					"circle-color": [
-						"step",
-						["get", "point_count"],
-						"rgb(103,169,207)",
-						10,
-						"rgb(209,229,240)",
-						30,
-						"rgb(253,219,199)",
-					],
-					"circle-radius": ["step", ["get", "point_count"], 15, 10, 20, 30, 25],
-				},
-			});
-
-			// add count to clusters+marker layer
-			map.addLayer({
-				id: "cluster-count",
-				type: "symbol",
-				source: "crash-data-markers",
-				filter: ["has", "point_count"],
-				layout: {
-					"text-field": "{point_count_abbreviated}",
-					"text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
-					"text-size": 12,
-				},
-				paint: {
-					"text-color": "#000",
-				},
-			});
-
-			map.addLayer({
-				id: "unclustered-point",
-				type: "circle",
-				source: "crash-data-markers",
-				filter: ["!", ["has", "point_count"]],
-				paint: {
-					"circle-color": "rgb(178,24,43)",
-					"circle-radius": 5,
-					"circle-stroke-width": 1,
-					"circle-stroke-color": "#fff",
-				},
-			});
+		if (datasetSelect === "Accident") {
+			handleAccidentData(data);
+		} else if (datasetSelect === "Drugs") {
+			handleDrugsData(data);
 		}
 
 		// after fetching --> check layer visibility matches current mode.
-		const currentMode = document.getElementById("layer-mode").value;
-		if (currentMode === "heatmap") {
+		if (datasetSelect === "Drugs") {
+			map.setLayoutProperty("crash-heat", "visibility", "none");
+			map.setLayoutProperty("clusters", "visibility", "none");
+			map.setLayoutProperty("cluster-count", "visibility", "none");
+			map.setLayoutProperty("unclustered-point", "visibility", "none");
+			map.setLayoutProperty("drug-choropleth", "visibility", "visible");
+			map.setLayoutProperty("drug-borders", "visibility", "visible");
+		} else if (document.getElementById("layer-mode").value === "heatmap") {
 			map.setLayoutProperty("crash-heat", "visibility", "visible");
 			map.setLayoutProperty("clusters", "visibility", "none");
 			map.setLayoutProperty("cluster-count", "visibility", "none");
 			map.setLayoutProperty("unclustered-point", "visibility", "none");
-		} else if (currentMode === "markers") {
+			map.setLayoutProperty("drug-choropleth", "visibility", "none");
+			map.setLayoutProperty("drug-borders", "visibility", "none");
+		} else if (document.getElementById("layer-mode").value === "markers") {
 			map.setLayoutProperty("crash-heat", "visibility", "none");
 			map.setLayoutProperty("clusters", "visibility", "visible");
 			map.setLayoutProperty("cluster-count", "visibility", "visible");
 			map.setLayoutProperty("unclustered-point", "visibility", "visible");
-		} else if (currentMode === "combined") {
+			map.setLayoutProperty("drug-choropleth", "visibility", "none");
+			map.setLayoutProperty("drug-borders", "visibility", "none");
+		} else if (document.getElementById("layer-mode").value === "combined") {
 			map.setLayoutProperty("crash-heat", "visibility", "visible");
 			map.setLayoutProperty("clusters", "visibility", "visible");
 			map.setLayoutProperty("cluster-count", "visibility", "visible");
 			map.setLayoutProperty("unclustered-point", "visibility", "visible");
+			map.setLayoutProperty("drug-choropleth", "visibility", "none");
+			map.setLayoutProperty("drug-borders", "visibility", "none");
 		}
 
-		// adjust the map view to fit the data bounds.
-		if (allFeatures.length > 0) {
+		// for Accident dataset only --> adjust the map view to fit the data bounds.
+		if (datasetSelect !== "Drugs" && allFeatures.length > 0) {
 			const lats = allFeatures.map((f) => f.geometry.coordinates[1]);
 			const lngs = allFeatures.map((f) => f.geometry.coordinates[0]);
 			const bounds = [
@@ -452,3 +395,149 @@ document.getElementById("fetch-data").addEventListener("click", async () => {
 		document.getElementById("loading-message").style.display = "none";
 	}
 });
+
+async function handleAccidentData(records) {
+	// Convert fetched data to GeoJSON.
+	const features = records
+		.filter((record) => {
+			const lat = parseFloat(record.LATITUDE);
+			const lng = parseFloat(record.LONGITUD);
+			if (isNaN(lat) || isNaN(lng)) return false;
+			if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
+			return true;
+		})
+		.map((record) => ({
+			type: "Feature",
+			properties: {
+				fatalities: record.FATALS ? Number(record.FATALS) : 1,
+				originalHour: record.HOUR ? Number(record.HOUR) : -1,
+				city: record.CITYNAME || "Not Applicable",
+				county: record.COUNTYNAME || "Not Applicable",
+				state: record.STATENAME || "Not Applicable",
+				drunk: record.DRUNK_DR ? Number(record.DRUNK_DR) : 0,
+				weather: record.WEATHER1NAME || "Unknown",
+			},
+			geometry: {
+				type: "Point",
+				coordinates: [parseFloat(record.LONGITUD), parseFloat(record.LATITUDE)],
+			},
+		}));
+
+	const geojsonData = {
+		type: "FeatureCollection",
+		features,
+	};
+	console.log("Generated GeoJSON:", geojsonData);
+
+	allFeatures = features;
+
+	// the heatmap source .
+	if (map.getSource("crash-data-heatmap")) {
+		map.getSource("crash-data-heatmap").setData(geojsonData);
+	} else {
+		map.addSource("crash-data-heatmap", {
+			type: "geojson",
+			data: geojsonData,
+			cluster: false,
+		});
+		map.addLayer({
+			id: "crash-heat",
+			type: "heatmap",
+			source: "crash-data-heatmap",
+			maxzoom: 9,
+			paint: {
+				"heatmap-weight": ["interpolate", ["linear"], ["get", "fatalities"], 0, 0, 5, 1],
+				"heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1, 9, 3],
+				"heatmap-color": [
+					"interpolate",
+					["linear"],
+					["heatmap-density"],
+					0,
+					"rgba(33,102,172,0)",
+					0.2,
+					"rgb(103,169,207)",
+					0.4,
+					"rgb(209,229,240)",
+					0.6,
+					"rgb(253,219,199)",
+					0.8,
+					"rgb(239,138,98)",
+					1,
+					"rgb(178,24,43)",
+				],
+				"heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 2, 9, 20],
+				"heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 1, 9, 0],
+			},
+		});
+	}
+
+	// the markers+clusters source.
+	if (map.getSource("crash-data-markers")) {
+		map.getSource("crash-data-markers").setData(geojsonData);
+	} else {
+		map.addSource("crash-data-markers", {
+			type: "geojson",
+			data: geojsonData,
+			cluster: true,
+			clusterMaxZoom: 14,
+			clusterRadius: 50,
+			clusterProperties: {
+				// sum of fatalities across current cluster of features
+				totalFatalities: ["+", ["get", "fatalities"]],
+			},
+		});
+
+		map.addLayer({
+			id: "clusters",
+			type: "circle",
+			source: "crash-data-markers",
+			filter: ["has", "point_count"],
+			paint: {
+				"circle-color": [
+					"step",
+					["get", "point_count"],
+					"rgb(103,169,207)",
+					10,
+					"rgb(209,229,240)",
+					30,
+					"rgb(253,219,199)",
+				],
+				"circle-radius": ["step", ["get", "point_count"], 15, 10, 20, 30, 25],
+			},
+		});
+
+		// add count to clusters+marker layer
+		map.addLayer({
+			id: "cluster-count",
+			type: "symbol",
+			source: "crash-data-markers",
+			filter: ["has", "point_count"],
+			layout: {
+				"text-field": "{point_count_abbreviated}",
+				"text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
+				"text-size": 12,
+			},
+			paint: {
+				"text-color": "#000",
+			},
+		});
+
+		map.addLayer({
+			id: "unclustered-point",
+			type: "circle",
+			source: "crash-data-markers",
+			filter: ["!", ["has", "point_count"]],
+			paint: {
+				"circle-color": "rgb(178,24,43)",
+				"circle-radius": 5,
+				"circle-stroke-width": 1,
+				"circle-stroke-color": "#fff",
+			},
+		});
+	}
+}
+
+async function handleDrugsData(records) {
+	// Convert fetched data to GeoJSON
+	// the state-level choropleth source.
+}
