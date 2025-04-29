@@ -11,54 +11,31 @@ const map = new mapboxgl.Map({
 
 let allFeatures = [];
 let stateGeoJSON = null;
+// URL for US states GeoJSON
 const statesGeojsonUrl = "https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json";
 
-// UI Elements
+// UI elements
 const datasetSelector = document.getElementById("dataset-selector");
 const timeControls = document.getElementById("time-filter-controls");
 const sliderContainer = document.getElementById("time-slider-container");
 const layerModeContainer = document.getElementById("layer-mode-container");
 
-datasetSelector.addEventListener("change", () => {
-	const ds = datasetSelector.value;
-	if (ds === "Accident") {
-		timeControls.style.display = "flex";
-		sliderContainer.style.display = "flex";
-		layerModeContainer.style.display = "flex";
-		[("drug-choropleth", "drug-borders")].forEach((id) => {
-			if (map.getLayer(id)) {
-				map.setLayoutProperty(id, "visibility", "none");
-			}
-		});
-		if (map.getLayer("crash-heat")) {
-			map.setLayoutProperty("crash-heat", "visibility", "visible");
-		}
-		if (map.getLayer("clusters")) {
-			map.setLayoutProperty("clusters", "visibility", "visible");
-		}
-		if (map.getLayer("cluster-count")) {
-			map.setLayoutProperty("cluster-count", "visibility", "visible");
-		}
-		if (map.getLayer("unclustered-point")) {
-			map.setLayoutProperty("unclustered-point", "visibility", "visible");
-		}
-	} else if (ds === "Drugs") {
+datasetSelector.addEventListener("change", (e) => {
+	const ds = e.target.value;
+	if (ds === "Drugs") {
 		timeControls.style.display = "none";
 		sliderContainer.style.display = "none";
 		layerModeContainer.style.display = "none";
-		[("crash-heat", "clusters", "cluster-count", "unclustered-point")].forEach((id) => {
-			if (map.getLayer(id)) {
-				map.setLayoutProperty(id, "visibility", "none");
-			}
+		["crash-heat", "clusters", "cluster-count", "unclustered-point"].forEach((id) => {
+			if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
 		});
-		if (map.getLayer("drug-choropleth")) {
-			map.setLayoutProperty("drug-choropleth", "visibility", "visible");
-		}
-		if (map.getLayer("drug-borders")) {
-			map.setLayoutProperty("drug-borders", "visibility", "visible");
-		}
+	} else {
+		timeControls.style.display = "flex";
+		sliderContainer.style.display = "flex";
+		layerModeContainer.style.display = "flex";
 	}
 });
+
 /**
  * Filters features based on the selected hour.
  * Returns a GeoJSON feature collection.
@@ -74,7 +51,6 @@ function filterFeaturesByTime(selectedHour) {
 	};
 }
 
-typeLegend = document.createElement("div");
 // Add a legend.
 function addLegend() {
 	const legend = document.createElement("div");
@@ -125,17 +101,12 @@ function updateLegendForAccident() {
 }
 
 function updateLegendForDrugs() {
+	const legend = document.getElementById("legend");
 	legend.innerHTML = `
-    <strong>Positive Drug Tests (%)</strong><br>
-    <div style="display: flex; align-items: center;">
-      <div style="width: 20px; height: 20px; background: rgba(33,102,172,1);"></div>
-      <span style="margin-left: 5px;">0%</span>
-    </div>
-    <div style="display: flex; align-items: center;">
-      <div style="width: 20px; height: 20px; background: rgb(178,24,43);"></div>
-      <span style="margin-left: 5px;">100%</span>
-    </div>
-  `;
+	  <strong>Positive Drug Tests (%)</strong><br>
+	  <div style="display:flex;align-items:center;"><div style="width:20px;height:20px;background:#f1eef6"></div><span style="margin-left:5px">0%</span></div>
+	  <div style="display:flex;align-items:center;"><div style="width:20px;height:20px;background:#dd1c77"></div><span style="margin-left:5px">100%</span></div>
+	`;
 }
 
 // Listen for changes on the time filter checkbox to enable/disable the slider.
@@ -315,10 +286,10 @@ document.getElementById("fetch-data").addEventListener("click", async () => {
 	const stateSelect = document.getElementById("select-state").value;
 	const startYear = document.getElementById("select-start-year").value;
 	const endYear = document.getElementById("select-end-year").value;
-	const datasetSelect = datasetSelector.value;
+	const selectedDataset = datasetSelector.value;
 
 	// Build the API URL.
-	let apiUrl = `https://cors-anywhere.herokuapp.com/https://crashviewer.nhtsa.dot.gov/CrashAPI/FARSData/GetFARSData?dataset=${datasetSelect}`;
+	let apiUrl = `https://cors-anywhere.herokuapp.com/https://crashviewer.nhtsa.dot.gov/CrashAPI/FARSData/GetFARSData?dataset=${selectedDataset}`;
 	if (startYear) {
 		apiUrl += `&FromYear=${startYear}`;
 	}
@@ -340,54 +311,12 @@ document.getElementById("fetch-data").addEventListener("click", async () => {
 		}
 		const resObj = await response.json();
 		const data = resObj.Results[0];
+		if (selectedDataset === "Accident") {
+			await handleAccidentData(data);
+		} else if (selectedDataset === "Drugs") {
+			await handleDrugsData(data);
+		}
 		console.log("Fetched data:", data);
-		if (datasetSelect === "Accident") {
-			handleAccidentData(data);
-		} else if (datasetSelect === "Drugs") {
-			handleDrugsData(data);
-		}
-
-		// after fetching --> check layer visibility matches current mode.
-		if (datasetSelect === "Drugs") {
-			map.setLayoutProperty("crash-heat", "visibility", "none");
-			map.setLayoutProperty("clusters", "visibility", "none");
-			map.setLayoutProperty("cluster-count", "visibility", "none");
-			map.setLayoutProperty("unclustered-point", "visibility", "none");
-			map.setLayoutProperty("drug-choropleth", "visibility", "visible");
-			map.setLayoutProperty("drug-borders", "visibility", "visible");
-		} else if (document.getElementById("layer-mode").value === "heatmap") {
-			map.setLayoutProperty("crash-heat", "visibility", "visible");
-			map.setLayoutProperty("clusters", "visibility", "none");
-			map.setLayoutProperty("cluster-count", "visibility", "none");
-			map.setLayoutProperty("unclustered-point", "visibility", "none");
-			map.setLayoutProperty("drug-choropleth", "visibility", "none");
-			map.setLayoutProperty("drug-borders", "visibility", "none");
-		} else if (document.getElementById("layer-mode").value === "markers") {
-			map.setLayoutProperty("crash-heat", "visibility", "none");
-			map.setLayoutProperty("clusters", "visibility", "visible");
-			map.setLayoutProperty("cluster-count", "visibility", "visible");
-			map.setLayoutProperty("unclustered-point", "visibility", "visible");
-			map.setLayoutProperty("drug-choropleth", "visibility", "none");
-			map.setLayoutProperty("drug-borders", "visibility", "none");
-		} else if (document.getElementById("layer-mode").value === "combined") {
-			map.setLayoutProperty("crash-heat", "visibility", "visible");
-			map.setLayoutProperty("clusters", "visibility", "visible");
-			map.setLayoutProperty("cluster-count", "visibility", "visible");
-			map.setLayoutProperty("unclustered-point", "visibility", "visible");
-			map.setLayoutProperty("drug-choropleth", "visibility", "none");
-			map.setLayoutProperty("drug-borders", "visibility", "none");
-		}
-
-		// for Accident dataset only --> adjust the map view to fit the data bounds.
-		if (datasetSelect !== "Drugs" && allFeatures.length > 0) {
-			const lats = allFeatures.map((f) => f.geometry.coordinates[1]);
-			const lngs = allFeatures.map((f) => f.geometry.coordinates[0]);
-			const bounds = [
-				[Math.min(...lngs), Math.min(...lats)],
-				[Math.max(...lngs), Math.max(...lats)],
-			];
-			map.fitBounds(bounds, { padding: 20 });
-		}
 	} catch (error) {
 		console.error("Error fetching or processing data:", error);
 		alert("An error occurred while fetching data. Please try again later.");
@@ -411,11 +340,6 @@ async function handleAccidentData(records) {
 			properties: {
 				fatalities: record.FATALS ? Number(record.FATALS) : 1,
 				originalHour: record.HOUR ? Number(record.HOUR) : -1,
-				city: record.CITYNAME || "Not Applicable",
-				county: record.COUNTYNAME || "Not Applicable",
-				state: record.STATENAME || "Not Applicable",
-				drunk: record.DRUNK_DR ? Number(record.DRUNK_DR) : 0,
-				weather: record.WEATHER1NAME || "Unknown",
 			},
 			geometry: {
 				type: "Point",
@@ -481,10 +405,6 @@ async function handleAccidentData(records) {
 			cluster: true,
 			clusterMaxZoom: 14,
 			clusterRadius: 50,
-			clusterProperties: {
-				// sum of fatalities across current cluster of features
-				totalFatalities: ["+", ["get", "fatalities"]],
-			},
 		});
 
 		map.addLayer({
@@ -535,9 +455,104 @@ async function handleAccidentData(records) {
 			},
 		});
 	}
+
+	// adjust the map view to fit the data bounds.
+	if (allFeatures.length > 0) {
+		const lats = allFeatures.map((f) => f.geometry.coordinates[1]);
+		const lngs = allFeatures.map((f) => f.geometry.coordinates[0]);
+		const bounds = [
+			[Math.min(...lngs), Math.min(...lats)],
+			[Math.max(...lngs), Math.max(...lats)],
+		];
+		map.fitBounds(bounds, { padding: 20 });
+	}
+
+	updateLegendForAccident();
 }
 
 async function handleDrugsData(records) {
-	// Convert fetched data to GeoJSON
+	// aggregate by state
+	const stats = {};
+	records.forEach((r) => {
+		const name = r.STATENAME;
+		if (!stats[name]) {
+			stats[name] = { total: 0, positive: 0 };
+		}
+		stats[name].total++;
+		if (r.DRUGRES !== "0") {
+			stats[name].positive++;
+		}
+	});
+
+	// load states geo once
+	if (!stateGeoJSON) {
+		stateGeoJSON = await fetch(statesGeojsonUrl).then((r) => r.json());
+	}
+	// inject properties
+	stateGeoJSON.features.forEach((f) => {
+		const n = f.properties.name;
+		const s = stats[n] || { total: 0, positive: 0 };
+		f.properties.totalTests = s.total;
+		f.properties.percentPositive = s.total ? Math.round((s.positive / s.total) * 100) : 0;
+	});
+
 	// the state-level choropleth source.
+	if (map.getSource("drug-choropleth")) {
+		map.getSource("drug-choropleth").setData(stateGeoJSON);
+	} else {
+		map.addSource("drug-choropleth", { type: "geojson", data: stateGeoJSON });
+		map.addLayer({
+			id: "drug-choropleth",
+			type: "fill",
+			source: "drug-choropleth",
+			paint: {
+				"fill-color": [
+					"interpolate",
+					["linear"],
+					["get", "percentPositive"],
+					0,
+					"#f1eef6",
+					20,
+					"#c994c7",
+					40,
+					"#dd1c77",
+					60,
+					"#980043",
+				],
+				"fill-opacity": 0.8,
+			},
+		});
+		map.addLayer({
+			id: "drug-borders",
+			type: "line",
+			source: "drug-choropleth",
+			paint: { "line-color": "#fff", "line-width": 1 },
+		});
+
+		const popup = new mapboxgl.Popup({
+			closeButton: false,
+			closeOnClick: false,
+		});
+		map.on("mousemove", "drug-choropleth", (e) => {
+			map.getCanvas().style.cursor = "pointer";
+			const p = e.features[0].properties;
+			const html = `
+		  <div style="
+			font-family:'Roboto';color:#ecf0f1;
+			background:#2a2a2a;padding:8px;
+			border-radius:8px;font-size:13px;
+		  ">
+			<strong style="color:#e74c3c;">${p.name}</strong><br>
+			<span>Total Tests: ${p.totalTests}</span><br>
+			<span>% Positive (%): ${p.percentPositive}</span>
+		  </div>`;
+			popup.setLngLat(e.lngLat).setHTML(html).addTo(map);
+		});
+		map.on("mouseleave", "drug-choropleth", () => {
+			map.getCanvas().style.cursor = "";
+			popup.remove();
+		});
+	}
+
+	updateLegendForDrugs();
 }
