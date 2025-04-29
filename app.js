@@ -538,11 +538,16 @@ async function handleDrugsData(records) {
 			const p = e.features[0].properties;
 			const html = `
 		  <div style="
-			font-family:'Roboto';color:#ecf0f1;
-			background:#2a2a2a;padding:8px;
-			border-radius:8px;font-size:13px;
+			font-family: 'Roboto', sans-serif;
+            font-size: 13px;
+            line-height: 1.3;
+            background: #2a2a2a;
+            color: #ecf0f1;
+            padding: 8px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
 		  ">
-			<strong style="color:#e74c3c;">${p.name}</strong><br>
+			<strong style="color:#1abc9c;">${p.name}</strong><br>
 			<span>Total Tests: ${p.totalTests}</span><br>
 			<span>% Positive (%): ${p.percentPositive}</span>
 		  </div>`;
