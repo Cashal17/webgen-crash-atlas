@@ -77,6 +77,7 @@ function addLegend() {
 map.on("load", addLegend);
 
 function updateLegendForAccident() {
+	const legend = document.getElementById("legend");
 	legend.innerHTML = `
     <strong>Fatalities</strong><br>
     <div style="display: flex; align-items: center;">
@@ -114,23 +115,11 @@ function updateLegendForDrugs() {
       <div style="width:20px;height:20px;background:rgba(217,240,203,0);"></div>
       <span style="margin-left:5px">Low</span>
     </div>
-    <div style="display:flex;align-items:center;">
-      <div style="width:20px;height:20px;background:rgb(199,233,192);"></div>
-      <span style="margin-left:5px">&nbsp;</span>
-    </div>
-	<div style="display: flex; align-items: center;">
-      <div style="width: 20px; height: 20px; background: rgb(161,217,155);"></div>
-      <span style="margin-left: 5px;">Medium</span>
-    </div>
-    <div style="display: flex; align-items: center;">
-      <div style="width: 20px; height: 20px; background: rgb(116,196,118);"></div>
-      <span style="margin-left: 5px;">&nbsp;</span>
-    </div>
     <div style="display: flex; align-items: center;">
       <div style="width: 20px; height: 20px; background: rgb(65,171,93);"></div>
       <span style="margin-left: 5px;">High</span>
     </div>
-    <div style="display: flex; align-items: center;">
+	<div style="display: flex; align-items: center;">
       <div style="width: 20px; height: 20px; background: rgb(0,109,44);"></div>
       <span style="margin-left: 5px;">Very High</span>
     </div>
@@ -287,7 +276,7 @@ map.on("mouseenter", "clusters", (e) => {
 		  <span>Total Fatalities: ${totalFatalities}</span><br>
 		  <span>Percentage of Accidents involving Drunk Driving: ${drunkPercentage}%</span><br>
 		  <span>Most Common Weather Condition: ${mostCommonWeather}</span><br>
-		  <span>Most Common County: ${mostCommonCounty}</span>
+		  <span>Most Common County: ${mostCommonCounty}</span><br>
 		  <span>Most Common State: ${mostCommonState}<span>
 		</div>`;
 
@@ -324,7 +313,7 @@ document.getElementById("fetch-data").addEventListener("click", async () => {
 	if (endYear) {
 		apiUrl += `&ToYear=${endYear}`;
 	}
-	if (stateSelect) {
+	if (selectedDataset !== "Drugs" && stateSelect) {
 		apiUrl += `&State=${stateSelect}`;
 	} else {
 		apiUrl += `&State=`;
@@ -368,6 +357,11 @@ async function handleAccidentData(records) {
 			properties: {
 				fatalities: record.FATALS ? Number(record.FATALS) : 1,
 				originalHour: record.HOUR ? Number(record.HOUR) : -1,
+				city: record.CITYNAME && record.CITYNAME !== "NOT APPLICABLE" ? record.CITYNAME : null,
+				county: record.COUNTYNAME && record.COUNTYNAME !== "NOT APPLICABLE" ? record.COUNTYNAME : null,
+				state: record.STATENAME || null,
+				drunk: record.DRUNK_DR ? Number(record.DRUNK_DR) : 0,
+				weather: record.WEATHER1NAME || null,
 			},
 			geometry: {
 				type: "Point",
@@ -499,16 +493,28 @@ async function handleAccidentData(records) {
 }
 
 async function handleDrugsData(records) {
+	map.flyTo({
+		center: [-96, 37.8],
+		zoom: 4,
+		speed: 0.8, // default is 1.2—slower means smoother
+		curve: 1.2,
+	});
+
 	// aggregate by state
 	const stats = {};
 	records.forEach((r) => {
 		const name = r.STATENAME;
 		if (!stats[name]) {
-			stats[name] = { total: 0, positive: 0 };
+			stats[name] = { total: 0, tests: 0, positive: 0 };
 		}
 		stats[name].total++;
+		// DRUGRES = "0" --> Test Not Given
 		if (r.DRUGRES !== "0") {
-			stats[name].positive++;
+			stats[name].tests++;
+			// DRUGRES = "1" --> Tested, No Drugs Found/Negative
+			if (r.DRUGRES !== "1") {
+				stats[name].positive++; // DRUGRES != "0" or "1" --> Some Positively Identified Drug
+			}
 		}
 	});
 
@@ -516,12 +522,19 @@ async function handleDrugsData(records) {
 	if (!stateGeoJSON) {
 		stateGeoJSON = await fetch(statesGeojsonUrl).then((r) => r.json());
 	}
+
 	// inject properties
 	stateGeoJSON.features.forEach((f) => {
-		const n = f.properties.name;
-		const s = stats[n] || { total: 0, positive: 0 };
-		f.properties.totalTests = s.total;
-		f.properties.percentPositive = s.total ? Math.round((s.positive / s.total) * 100) : 0;
+		const name = f.properties.name;
+		const totalAcc = stats[name] ? stats[name].total : 0;
+		const pos = stats[name] ? stats[name].positive : 0;
+		const tests = stats[name] ? stats[name].tests : 0;
+		f.properties.totalAccidents = totalAcc;
+		f.properties.totalTests = tests;
+		f.properties.positiveDrugTests = pos;
+		f.properties.positivesPerTests = tests ? Math.round((pos / tests) * 100) : 0;
+		f.properties.positivePercentage = totalAcc ? Math.round((pos / totalAcc) * 100) : 0;
+		f.properties.positivesPerThousand = totalAcc ? Math.round((pos / totalAcc) * 1000) : 0;
 	});
 
 	// the state-level choropleth source.
@@ -537,18 +550,18 @@ async function handleDrugsData(records) {
 				"fill-color": [
 					"interpolate",
 					["linear"],
-					["get", "percentPositive"],
+					["get", "positivePercentage"],
 					0,
 					"rgba(217,240,203,0)",
-					20,
+					5,
 					"rgb(199,233,192)",
-					40,
+					10,
 					"rgb(161,217,155)",
-					60,
+					15,
 					"rgb(116,196,118)",
-					80,
+					20,
 					"rgb(65,171,93)",
-					100,
+					25,
 					"rgb(0,109,44)",
 				],
 				"fill-opacity": 0.8,
@@ -580,8 +593,9 @@ async function handleDrugsData(records) {
             box-shadow: 0 2px 6px rgba(0,0,0,0.5);
 		  ">
 			<strong style="color:#1abc9c;">${p.name}</strong><br>
-			<span>Total Drug Tests: ${p.totalTests}</span><br>
-			<span>Positive (%): ${p.percentPositive}</span>
+			<span>Total Accidents: ${p.totalAccidents}</span><br>
+			<span>Drug Tests Found Positive(%): ${p.positivesPerTests}</span><br>
+			<span>Drug-Positive Accidents (per 1,000): ${p.positivesPerThousand}</span>
 		  </div>`;
 			popup.setLngLat(e.lngLat).setHTML(html).addTo(map);
 		});
