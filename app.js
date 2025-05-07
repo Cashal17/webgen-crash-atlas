@@ -39,6 +39,9 @@ datasetSelector.addEventListener("change", (e) => {
 		timeControls.style.display = "flex";
 		sliderContainer.style.display = "flex";
 		layerModeContainer.style.display = "flex";
+		["drug-choropleth", "drug-borders"].forEach((id) => {
+			if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
+		});
 	}
 });
 
@@ -493,13 +496,6 @@ async function handleAccidentData(records) {
 }
 
 async function handleDrugsData(records) {
-	map.flyTo({
-		center: [-96, 37.8],
-		zoom: 4,
-		speed: 0.8, // default is 1.2—slower means smoother
-		curve: 1.2,
-	});
-
 	// aggregate by state
 	const stats = {};
 	records.forEach((r) => {
@@ -604,6 +600,13 @@ async function handleDrugsData(records) {
 			popup.remove();
 		});
 	}
+
+	map.flyTo({
+		center: [-96, 37.8],
+		zoom: 4,
+		speed: 1.0, // default is 1.2—slower means smoother
+		curve: 1.2,
+	});
 
 	updateLegendForDrugs();
 }
