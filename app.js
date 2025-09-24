@@ -1,3 +1,50 @@
+// IndexedDB for caching
+// Name of our database and object store
+const DB_NAME = "CrashDataCache";
+const DB_VERSION = 1;
+const STORE_NAME = "farsResults";
+
+// Open (or create) IndexedDB
+function openDatabase() {
+	return new Promise((resolve, reject) => {
+		const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+		// Create schema if first time or version upgrade
+		request.onupgradeneeded = (event) => {
+			const db = event.target.result;
+			if (!db.objectStoreNames.contains(STORE_NAME)) {
+				db.createObjectStore(STORE_NAME, { keyPath: "key" });
+				// "key" will be a unique string we construct from dataset+state+years
+			}
+		};
+
+		request.onsuccess = () => resolve(request.result);
+		request.onerror = () => reject(request.error);
+	});
+}
+
+// Save a result to cache
+async function saveToCache(key, data) {
+	const db = await openDatabase();
+	const tx = db.transaction(STORE_NAME, "readwrite");
+	tx.objectStore(STORE_NAME).put({ key, data, timestamp: Date.now() });
+	return tx.complete;
+}
+
+// Retrieve from cache
+async function getFromCache(key) {
+	const db = await openDatabase();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(STORE_NAME, "readonly");
+		const store = tx.objectStore(STORE_NAME);
+		const request = store.get(key);
+		request.onsuccess = () => {
+			resolve(request.result ? request.result.data : null);
+		};
+		request.onerror = () => reject(request.error);
+	});
+}
+
 // Mapbox access token
 mapboxgl.accessToken = "pk.eyJ1IjoiY2FzaGFsIiwiYSI6ImNtOHBmN285cTBhNW4yanE0ZTNiN2UxeXAifQ.JqlCwmFykXHwQ9XeCxQAmw";
 
@@ -308,6 +355,25 @@ document.getElementById("fetch-data").addEventListener("click", async () => {
 	const endYear = document.getElementById("select-end-year").value;
 	const selectedDataset = datasetSelector.value;
 
+	// Construct unique cache key
+	const cacheKey = `${selectedDataset}_${stateSelect}_${startYear}_${endYear}`;
+
+	// Try cache first
+	let data = await getFromCache(cacheKey);
+
+	if (data) {
+		console.log("Loaded from cache:", cacheKey);
+		// Use cached data directly
+		if (selectedDataset === "Accident") {
+			await handleAccidentData(data);
+		} else if (selectedDataset === "Drugs") {
+			await handleDrugsData(data);
+		}
+		loadingMessage.style.display = "none";
+		return;
+	}
+
+	// If not in cache, fetch from API
 	// Build the API URL.
 	let apiUrl = `https://cors-anywhere.herokuapp.com/https://crashviewer.nhtsa.dot.gov/CrashAPI/FARSData/GetFARSData?dataset=${selectedDataset}`;
 	if (startYear) {
@@ -331,12 +397,16 @@ document.getElementById("fetch-data").addEventListener("click", async () => {
 		}
 		const resObj = await response.json();
 		const data = resObj.Results[0];
+
+		// Save fresh result to cache
+		await saveToCache(cacheKey, data);
+
 		if (selectedDataset === "Accident") {
 			await handleAccidentData(data);
 		} else if (selectedDataset === "Drugs") {
 			await handleDrugsData(data);
 		}
-		console.log("Fetched data:", data);
+		console.log("Fetched and cached data:", data);
 	} catch (error) {
 		console.error("Error fetching or processing data:", error);
 		alert("An error occurred while fetching data. Please try again later.");
