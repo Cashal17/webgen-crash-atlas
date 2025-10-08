@@ -344,6 +344,88 @@ map.on("zoom", () => {
 	clusterPopup.remove();
 });
 
+/**
+ * ========================================================
+ *  SMART YEAR-BY-YEAR CACHING & FETCH SYSTEM
+ * ========================================================
+ *  This replaces the old "fetch once per range" logic.
+ *  - Each (dataset, state, year) combination is cached separately.
+ *  - When user requests a range (e.g., 2013–2018),
+ *    the system checks which years exist in cache and
+ *    only fetches missing years from the API.
+ *  - All yearly data are merged before visualization.
+ */
+
+// Helper: Create a unique cache key per dataset/state/year
+function buildYearKey(dataset, state, year1, year2) {
+	return `${dataset}_${state || "ALL"}_${year1}_${year2}`;
+}
+
+// Fetch a single year's data from cache or API
+async function fetchSingleYearData(dataset, state, year1, year2) {
+	const key = buildYearKey(dataset, state, year1, year2);
+
+	// Try getting from cache first
+	let data = await getFromCache(key);
+	if (data) {
+		console.log(`Loaded from cache: ${key}`);
+		return data;
+	}
+
+	// Otherwise, fetch from API
+	let apiUrl = `https://cors-anywhere.herokuapp.com/https://crashviewer.nhtsa.dot.gov/CrashAPI/FARSData/GetFARSData?dataset=${dataset}&FromYear=${year1}&ToYear=${year2}`;
+	if (dataset !== "Drugs" && state) apiUrl += `&State=${state}`;
+	else apiUrl += "&State=";
+	apiUrl += "&format=json";
+
+	console.log("Fetching year:", year1, "→", apiUrl);
+
+	const response = await fetch(apiUrl);
+	if (!response.ok) throw new Error(`Failed for ${year1}: ${response.statusText}`);
+
+	const resObj = await response.json();
+	const results = resObj.Results[0];
+
+	// Cache the result
+	await saveToCache(key, results);
+	console.log(`Cached new data for: ${key}`);
+
+	return results;
+}
+
+// Fetch across a range of years, combining cached + fetched data
+async function fetchYearRangeData(dataset, state, fromYear, toYear) {
+	let start = parseInt(fromYear);
+	let end = parseInt(toYear);
+
+	// --- Validation Layer ---
+	// Enforce valid data range (2010–2020)
+	if (isNaN(start) || isNaN(end)) throw new Error("Invalid year input.");
+	if (start < 2010) start = 2010;
+	if (end > 2020) end = 2020;
+
+	// Ensure valid range (must be at least 1 year apart)
+	if (start === end) {
+		console.warn(`Adjusted same-year request ${start} → ${start + 1}`);
+		end = start + 1;
+	}
+
+	// --- Chunked Fetch Logic ---
+	const allData = [];
+	for (let y = start; y < end; y++) {
+		try {
+			const yearlyData = await fetchSingleYearData(dataset, state, y, y + 1);
+			if (Array.isArray(yearlyData)) allData.push(...yearlyData);
+			else console.warn(`Unexpected data format for year ${y}`);
+		} catch (err) {
+			console.error(`Error fetching ${y}:`, err);
+		}
+	}
+
+	console.log(`Combined data for ${start}–${end}:`, allData.length, "records total");
+	return allData;
+}
+
 // Fetch data.
 document.getElementById("fetch-data").addEventListener("click", async () => {
 	const loadingMessage = document.getElementById("loading-message");
@@ -355,63 +437,21 @@ document.getElementById("fetch-data").addEventListener("click", async () => {
 	const endYear = document.getElementById("select-end-year").value;
 	const selectedDataset = datasetSelector.value;
 
-	// Construct unique cache key
-	const cacheKey = `${selectedDataset}_${stateSelect}_${startYear}_${endYear}`;
-
-	// Try cache first
-	let data = await getFromCache(cacheKey);
-
-	if (data) {
-		console.log("Loaded from cache:", cacheKey);
-		// Use cached data directly
-		if (selectedDataset === "Accident") {
-			await handleAccidentData(data);
-		} else if (selectedDataset === "Drugs") {
-			await handleDrugsData(data);
-		}
-		loadingMessage.style.display = "none";
-		return;
-	}
-
-	// If not in cache, fetch from API
-	// Build the API URL.
-	let apiUrl = `https://cors-anywhere.herokuapp.com/https://crashviewer.nhtsa.dot.gov/CrashAPI/FARSData/GetFARSData?dataset=${selectedDataset}`;
-	if (startYear) {
-		apiUrl += `&FromYear=${startYear}`;
-	}
-	if (endYear) {
-		apiUrl += `&ToYear=${endYear}`;
-	}
-	if (selectedDataset !== "Drugs" && stateSelect) {
-		apiUrl += `&State=${stateSelect}`;
-	} else {
-		apiUrl += `&State=`;
-	}
-	apiUrl += "&format=json";
-	console.log("Requesting:", apiUrl);
-
 	try {
-		const response = await fetch(apiUrl);
-		if (!response.ok) {
-			throw new Error("Network response was not ok");
-		}
-		const resObj = await response.json();
-		const data = resObj.Results[0];
+		// Fetch all needed years intelligently
+		const combinedData = await fetchYearRangeData(selectedDataset, stateSelect, startYear, endYear);
 
-		// Save fresh result to cache
-		await saveToCache(cacheKey, data);
-
+		// Then process it as usual
 		if (selectedDataset === "Accident") {
-			await handleAccidentData(data);
+			await handleAccidentData(combinedData);
 		} else if (selectedDataset === "Drugs") {
-			await handleDrugsData(data);
+			await handleDrugsData(combinedData);
 		}
-		console.log("Fetched and cached data:", data);
 	} catch (error) {
 		console.error("Error fetching or processing data:", error);
 		alert("An error occurred while fetching data. Please try again later.");
 	} finally {
-		document.getElementById("loading-message").style.display = "none";
+		loadingMessage.style.display = "none";
 	}
 });
 
