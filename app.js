@@ -358,7 +358,11 @@ map.on("zoom", () => {
 
 // Helper: Create a unique cache key per dataset/state/year
 function buildYearKey(dataset, state, year1, year2) {
-	return `${dataset}_${state || "ALL"}_${year1}_${year2}`;
+	if (dataset === "Drugs") {
+		return `${dataset}_${year1}_${year2}`;
+	} else {
+		return `${dataset}_${state || "ALL"}_${year1}_${year2}`;
+	}
 }
 
 // Fetch a single year's data from cache or API
