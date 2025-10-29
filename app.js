@@ -4,7 +4,7 @@ const DB_NAME = "CrashDataCache";
 const DB_VERSION = 1;
 const STORE_NAME = "farsResults";
 
-// Open (or create) IndexedDB
+// Open (or create) IndexedDB database
 function openDatabase() {
 	return new Promise((resolve, reject) => {
 		const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -23,12 +23,51 @@ function openDatabase() {
 	});
 }
 
-// Save a result to cache
+// Save a result to cache (DEBUG VERSION)
 async function saveToCache(key, data) {
+	console.log("[DEBUG] saveToCache() called");
+	console.log("[DEBUG] Key:", key);
+	console.log("[DEBUG] typeof data:", typeof data);
+
+	// Try measuring size of the data to see if it's too large
+	try {
+		const jsonStr = JSON.stringify(data);
+		console.log("[DEBUG] Approx JSON size:", (jsonStr.length / 1024).toFixed(2), "KB");
+	} catch (err) {
+		console.error("[DEBUG] JSON.stringify failed — possible circular structure:", err);
+	}
+
+	// Attempt a shallow clone to avoid weird structured-clone recursion
+	let safeData = data;
+	try {
+		safeData = JSON.parse(JSON.stringify(data));
+		console.log("[DEBUG] Data cloned successfully before saving.");
+	} catch (err) {
+		console.warn("[DEBUG] Could not deep-clone data. Storing original object directly.");
+	}
+
 	const db = await openDatabase();
 	const tx = db.transaction(STORE_NAME, "readwrite");
-	tx.objectStore(STORE_NAME).put({ key, data, timestamp: Date.now() });
-	return tx.complete;
+	console.log("[DEBUG] Transaction started. Attempting to store in IndexedDB…");
+
+	try {
+		tx.objectStore(STORE_NAME).put({ key, data: safeData, timestamp: Date.now() });
+		console.log("[DEBUG] put() executed.");
+	} catch (err) {
+		console.error("[DEBUG] IndexedDB put() threw an error:", err);
+	}
+
+	// check completion with oncomplete
+	return new Promise((resolve, reject) => {
+		tx.oncomplete = () => {
+			console.log("[DEBUG] Transaction completed successfully.");
+			resolve();
+		};
+		tx.onerror = (e) => {
+			console.error("[DEBUG] Transaction error:", e.target.error);
+			reject(e.target.error);
+		};
+	});
 }
 
 // Retrieve from cache
@@ -71,24 +110,36 @@ datasetSelector.addEventListener("change", (e) => {
 	const ds = e.target.value;
 	const stateSel = document.getElementById("select-state");
 	const yearNote = document.getElementById("year-note");
+
+	// Always disable all layers first
+	["crash-heat", "clusters", "cluster-count", "unclustered-point", "drug-choropleth", "drug-borders"].forEach(
+		(id) => {
+			if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
+		}
+	);
+
+	// Always hide navigation by default
+	disableNavigationMode();
+
 	if (ds === "Drugs") {
 		stateSel.disabled = true;
 		yearNote.style.display = "block";
 		timeControls.style.display = "none";
 		sliderContainer.style.display = "none";
 		layerModeContainer.style.display = "none";
-		["crash-heat", "clusters", "cluster-count", "unclustered-point"].forEach((id) => {
-			if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
-		});
-	} else {
+	} else if (ds === "Accident") {
 		stateSel.disabled = false;
 		yearNote.style.display = "none";
 		timeControls.style.display = "flex";
 		sliderContainer.style.display = "flex";
 		layerModeContainer.style.display = "flex";
-		["drug-choropleth", "drug-borders"].forEach((id) => {
-			if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
-		});
+	} else if (ds === "Navigation") {
+		stateSel.disabled = true;
+		yearNote.style.display = "none";
+		timeControls.style.display = "none";
+		sliderContainer.style.display = "none";
+		layerModeContainer.style.display = "none";
+		enableNavigationMode();
 	}
 });
 
@@ -365,34 +416,54 @@ function buildYearKey(dataset, state, year1, year2) {
 	}
 }
 
-// Fetch a single year's data from cache or API
+// Fetch a single year's data from cache or API (DEBUG VERSION)
 async function fetchSingleYearData(dataset, state, year1, year2) {
-	const key = buildYearKey(dataset, state, year1, year2);
+	console.log("[DEBUG] fetchSingleYearData() called with:", { dataset, state, year1, year2 });
 
-	// Try getting from cache first
+	const key = buildYearKey(dataset, state, year1, year2);
+	console.log("[DEBUG] Generated cache key:", key);
+
+	// Try loading from cache first
 	let data = await getFromCache(key);
+	console.log("[DEBUG] Cache lookup result:", data ? "HIT" : "MISS");
+
 	if (data) {
-		console.log(`Loaded from cache: ${key}`);
+		console.log("[DEBUG] Returning cached data immediately.");
 		return data;
 	}
 
-	// Otherwise, fetch from API
+	// Build API URL
 	let apiUrl = `https://cors-anywhere.herokuapp.com/https://crashviewer.nhtsa.dot.gov/CrashAPI/FARSData/GetFARSData?dataset=${dataset}&FromYear=${year1}&ToYear=${year2}`;
 	if (dataset !== "Drugs" && state) apiUrl += `&State=${state}`;
 	else apiUrl += "&State=";
 	apiUrl += "&format=json";
 
-	console.log("Fetching year:", year1, "→", apiUrl);
+	console.log("[DEBUG] Fetching from API:", apiUrl);
 
+	// Perform the request
 	const response = await fetch(apiUrl);
+	console.log("[DEBUG] Response status:", response.status);
 	if (!response.ok) throw new Error(`Failed for ${year1}: ${response.statusText}`);
 
+	// Parse the JSON
 	const resObj = await response.json();
-	const results = resObj.Results[0];
+	console.log("[DEBUG] Top-level response keys:", Object.keys(resObj));
 
-	// Cache the result
+	const results = resObj.Results[0];
+	console.log("[DEBUG] Results type:", typeof results, "| Array length:", results?.length || "N/A");
+
+	// Inspect data shape and size
+	try {
+		const sizeKB = JSON.stringify(results).length / 1024;
+		console.log("[DEBUG] Approx results size (KB):", sizeKB.toFixed(2));
+	} catch (e) {
+		console.warn("[DEBUG] Could not stringify results — possible circular data.");
+	}
+
+	// Try caching — this is where recursion / overflow might occur
+	console.log("[DEBUG] Attempting to save to cache...");
 	await saveToCache(key, results);
-	console.log(`Cached new data for: ${key}`);
+	console.log("[DEBUG] Cache save complete.");
 
 	return results;
 }
@@ -415,12 +486,20 @@ async function fetchYearRangeData(dataset, state, fromYear, toYear) {
 	}
 
 	// --- Chunked Fetch Logic ---
-	const allData = [];
+	let allData = [];
 	for (let y = start; y < end; y++) {
 		try {
-			const yearlyData = await fetchSingleYearData(dataset, state, y, y + 1);
-			if (Array.isArray(yearlyData)) allData.push(...yearlyData);
-			else console.warn(`Unexpected data format for year ${y}`);
+			let yearlyData = await fetchSingleYearData(dataset, state, y, y + 1);
+			console.log(
+				`Successfully returned results from fetchSingleYearData: ${typeof yearlyData} | ${yearlyData.length}`
+			);
+			if (Array.isArray(yearlyData)) {
+				console.log(`Before: ${allData}`);
+				console.log(`${yearlyData}`);
+				allData.push(...yearlyData);
+				console.log(`After: ${allData}`);
+				//			console.log(`${yearlyData}`)
+			} else console.warn(`Unexpected data format for year ${y}`);
 		} catch (err) {
 			console.error(`Error fetching ${y}:`, err);
 		}
