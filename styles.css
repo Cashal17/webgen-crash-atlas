@@ -143,3 +143,83 @@ body {
 #legend div span {
 	margin-left: 5px;
 }
+
+/* Navigation UI styling */
+#nav-controls {
+	display: flex;
+	flex-direction: column;
+	gap: 15px;
+	margin-top: 10px;
+}
+
+#nav-controls label {
+	font-weight: bold;
+	margin-bottom: -5px;
+}
+
+#nav-controls input,
+#nav-controls button {
+	width: 100%;
+	padding: 10px;
+	border: 1px solid #555;
+	border-radius: 8px;
+	background: #333;
+	color: #f1f1f1;
+	font-size: 1em;
+	transition: all 0.3s ease;
+}
+
+#nav-controls input:focus,
+#nav-controls button:focus {
+	outline: none;
+	border-color: #1abc9c;
+}
+
+#nav-route-go {
+	background: #1abc9c;
+	color: #1e1e1e;
+	font-weight: bold;
+	border: none;
+	cursor: pointer;
+}
+
+#nav-route-go:hover {
+	background: #16a085;
+}
+
+#nav-back {
+	background: #444;
+	color: #ddd;
+	font-weight: bold;
+	border: none;
+	cursor: pointer;
+}
+
+#nav-back:hover {
+	background: #555;
+}
+
+.suggestions {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	background: #2a2a2a;
+	border: 1px solid #444;
+	max-height: 150px;
+	overflow-y: auto;
+	position: absolute;
+	width: 180px;
+	z-index: 999;
+}
+
+.suggestions li {
+	padding: 6px 10px;
+	cursor: pointer;
+	border-bottom: 1px solid #444;
+	color: #ddd;
+}
+
+.suggestions li:hover {
+	background: #1abc9c;
+	color: white;
+}

@@ -122,18 +122,21 @@ datasetSelector.addEventListener("change", (e) => {
 	disableNavigationMode();
 
 	if (ds === "Drugs") {
+		document.getElementById("filter-controls").style.display = "block";
 		stateSel.disabled = true;
 		yearNote.style.display = "block";
 		timeControls.style.display = "none";
 		sliderContainer.style.display = "none";
 		layerModeContainer.style.display = "none";
 	} else if (ds === "Accident") {
+		document.getElementById("filter-controls").style.display = "block";
 		stateSel.disabled = false;
 		yearNote.style.display = "none";
 		timeControls.style.display = "flex";
 		sliderContainer.style.display = "flex";
 		layerModeContainer.style.display = "flex";
 	} else if (ds === "Navigation") {
+		document.getElementById("filter-controls").style.display = "none";
 		stateSel.disabled = true;
 		yearNote.style.display = "none";
 		timeControls.style.display = "none";

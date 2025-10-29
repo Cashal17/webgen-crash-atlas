@@ -18,6 +18,7 @@
 					<!-- Dataset selector -->
 					<label for="dataset-selector">Dataset:</label>
 					<select id="dataset-selector">
+						<option value="Navigation">SaferRoute Navigation</option>
 						<option value="Accident" selected>ACCIDENT (Fatalities)</option>
 						<option value="Drugs">DRUGS</option>
 					</select>
@@ -143,6 +144,24 @@
 						</select>
 					</div>
 				</div>
+				<!-- Navigation Controls (hidden by default) -->
+				<div id="nav-controls" style="display: none">
+					<label for="nav-start">Start:</label>
+					<input id="nav-start" placeholder="e.g. Times Square" />
+
+					<label for="nav-end">Destination:</label>
+					<input id="nav-end" placeholder="e.g. JFK Airport" />
+
+					<ul id="start-suggestions" class="suggestions"></ul>
+					<ul id="end-suggestions" class="suggestions"></ul>
+
+					<label id="nav-prefer-safer-label"> Prefer Safer Route</label>
+					<input id="nav-prefer-safer" type="checkbox" checked />
+
+					<div id="nav-details"></div>
+					<button id="nav-route-go">Get Route</button>
+					<button id="nav-back">Back</button>
+				</div>
 			</aside>
 
 			<!-- Main map container -->
@@ -156,5 +175,6 @@
 		<script src="https://api.mapbox.com/mapbox-gl-js/v2.13.0/mapbox-gl.js"></script>
 		<!-- Your app script -->
 		<script src="app.js" defer></script>
+		<script src="navigation.js" defer></script>
 	</body>
 </html>
